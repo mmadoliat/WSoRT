@@ -47,7 +47,7 @@ summary.knn_s3 <- function(object, ...) {
 # fitted values
 #' @export
 fitted.knn_s3 <- function(object, ...) {
-  predict(object, newdata = object$train_x, method = "cpp")
+  predict(object, newdata = object$train_x, method = "R")
 }
 
 #' @export
@@ -67,7 +67,7 @@ predict.knn_s3 <- function(object, newdata, method = c("R","cpp"), ...) {
   }
   
   # 2) dispatch to R or C++ backend
-  if (method == "R") {
+  if (method != "cpp") {
     n <- nrow(object$train_x)
     m <- nrow(Xtest)
     preds <- numeric(m)
@@ -98,4 +98,61 @@ anova.knn_s3 <- function(object, ...) {
   df$DeltaMSE <- c(NA, diff(df$MSE))
   print(df, row.names = FALSE)
   invisible(df)
+}
+
+
+############### Used on HO3 #####################
+
+
+simulate_knn_data <- function(n = 1000, p = 5, m = 200, k = 10) {
+  # Simulate training predictors (n x p matrix)
+  train_x <- matrix(rnorm(n * p), nrow = n, ncol = p)
+  
+  # Create a nonlinear signal for y
+  # Example: sum of first 2 features + some noise
+  signal <- train_x[, 1] + 2 * train_x[, 2]
+  train_y <- ifelse(signal + rnorm(n) > 0, 1, 0)  # binary classification
+  
+  # Simulate test predictors (m x p matrix)
+  test_x <- matrix(rnorm(m * p), nrow = m, ncol = p)
+  
+  # Return list
+  return(list(
+    train_x = train_x,
+    train_y = train_y,
+    test_x  = test_x,
+    k       = k
+  ))
+}
+
+knn_pred_R <- function(train_x, train_y, test_x, k) {
+  # Coerce types
+  train_x <- as.matrix(train_x)
+  test_x  <- as.matrix(test_x)
+  train_y <- as.numeric(train_y)
+  
+  n <- nrow(train_x); p <- ncol(train_x); m <- nrow(test_x)
+  
+  # Checks
+  if (length(train_y) != n) stop("train_y must have length nrow(train_x).")
+  if (ncol(test_x) != p)   stop("test_x must have the same number of columns as train_x.")
+  if (k < 1 || k > n)      stop("k must be between 1 and nrow(train_x).")
+  if (anyNA(train_x) || anyNA(test_x) || anyNA(train_y))
+    stop("NA values are not supported.")
+  
+  preds <- numeric(m)
+  
+  for (j in seq_len(m)) {
+    # Squared Euclidean distances using matrix ops (fast):
+    # t(train_x) is p x n; subtract p-vector test_x[j,]; colSums -> length n
+    dists <- colSums((t(train_x) - test_x[j, ])^2)
+    
+    # Indices of k smallest distances (full sort, simple & reliable)
+    idx_k <- order(dists)[seq_len(k)]
+    
+    # Mean of neighbor labels
+    preds[j] <- mean(train_y[idx_k])
+  }
+  
+  preds
 }

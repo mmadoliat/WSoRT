@@ -29,7 +29,7 @@ print.knn_s3 <- function(x, ...) {
 predict.knn_s3 <- function(object, newdata, method = c("R", "cpp"), ...) {
   method <- match.arg(method)
   Xtest <- as.matrix(newdata)
-  if (method == "R") {
+  if (method != "cpp") {
     n <- nrow(object$train_x)
     m <- nrow(Xtest)
     preds <- numeric(m)
